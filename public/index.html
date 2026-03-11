@@ -30,7 +30,7 @@
   <script>
     // Conectarse al servidor WebSocket
     // En Render sería: wss://tu-app.onrender.com
-    const socket = new WebSocket('ws://localhost:3000');
+    const socket = new WebSocket('https://web_social.onrender.com');
 
     socket.onopen = () => {
       document.getElementById('status').textContent = '🟢 Conectado al servidor';
