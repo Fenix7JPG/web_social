@@ -37,7 +37,7 @@
     const SIZE  = 32;
 
     // WebSocket — cambiá localhost por tu URL de Render
-    const socket = new WebSocket('ws://localhost:3000');
+    const socket = new WebSocket('https://web-social-jspo.onrender.com/');
 
     socket.onopen = () => {
       document.getElementById('status').textContent = '🟢 Conectado';
