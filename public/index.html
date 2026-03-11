@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Variable Compartida</title>
+  <style>
+    body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 40px; background: #1a1a2e; color: white; }
+    h1 { color: #e94560; }
+    #valor { font-size: 2rem; background: #16213e; padding: 20px 40px; border-radius: 10px; margin: 20px 0; border: 2px solid #e94560; }
+    input { padding: 10px; font-size: 1rem; border-radius: 8px; border: none; width: 300px; }
+    button { padding: 10px 20px; font-size: 1rem; background: #e94560; color: white; border: none; border-radius: 8px; cursor: pointer; margin-left: 10px; }
+    button:hover { background: #c73652; }
+    #status { color: #aaa; font-size: 0.85rem; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>🌐 Variable Compartida</h1>
+  <p>Este valor es el mismo para <strong>todas las pestañas y PCs</strong> conectadas:</p>
+
+  <!-- Acá se muestra la variable -->
+  <div id="valor">Conectando...</div>
+
+  <div>
+    <input type="text" id="input" placeholder="Escribí un nuevo valor..." />
+    <button onclick="cambiarVariable()">Cambiar</button>
+  </div>
+
+  <div id="status">⚪ Conectando al servidor...</div>
+
+  <script>
+    // Conectarse al servidor WebSocket
+    // En Render sería: wss://tu-app.onrender.com
+    const socket = new WebSocket('ws://localhost:3000');
+
+    socket.onopen = () => {
+      document.getElementById('status').textContent = '🟢 Conectado al servidor';
+    };
+
+    socket.onclose = () => {
+      document.getElementById('status').textContent = '🔴 Desconectado del servidor';
+    };
+
+    // Cuando el servidor nos manda un mensaje
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.type === 'update') {
+        // ✅ Actualizar lo que se ve en pantalla
+        document.getElementById('valor').textContent = data.value;
+      }
+    };
+
+    // Cuando apretás el botón
+    function cambiarVariable() {
+      const nuevoValor = document.getElementById('input').value;
+      if (!nuevoValor) return;
+
+      // Mandar el nuevo valor al servidor
+      socket.send(JSON.stringify({ type: 'change', value: nuevoValor }));
+
+      document.getElementById('input').value = '';
+    }
+
+    // También con Enter
+    document.getElementById('input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') cambiarVariable();
+    });
+  </script>
+</body>
+</html>
