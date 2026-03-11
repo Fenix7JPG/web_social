@@ -2,39 +2,55 @@ const express = require('express');
 const WebSocket = require('ws');
 const app = express();
 
-// ✅ LA VARIABLE COMPARTIDA - vive en el servidor
-let sharedVariable = "Hola mundo";
+// LA variable compartida — posiciones de todos los jugadores
+let players = {};
 
 app.use(express.static('public'));
 
 const server = app.listen(process.env.PORT || 3000, () => {
-  console.log('Servidor corriendo en puerto', process.env.PORT || 3000);
+  console.log('Servidor corriendo!');
 });
 
 const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (ws) => {
-  console.log('Nuevo cliente conectado');
+  const id = Math.random().toString(36).slice(2);
+  players[id] = { x: 100, y: 100 };
 
-  // Cuando alguien se conecta, le mandamos el valor actual
-  ws.send(JSON.stringify({ type: 'update', value: sharedVariable }));
+  // Decirle al jugador su ID + todos los jugadores actuales
+  ws.send(JSON.stringify({ type: 'init', id, players }));
+
+  // Avisarle a todos los demás que llegó alguien nuevo
+  broadcast(ws, { type: 'playerJoined', id, x: 100, y: 100 });
 
   ws.on('message', (msg) => {
     const data = JSON.parse(msg);
-
-    if (data.type === 'change') {
-      // Actualizar la variable en el servidor
-      sharedVariable = data.value;
-      console.log('Variable cambiada a:', sharedVariable);
-
-      // Mandar el nuevo valor a TODOS los clientes conectados
-      wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ type: 'update', value: sharedVariable }));
-        }
-      });
+    if (data.type === 'move') {
+      players[id] = { x: data.x, y: data.y };
+      broadcast(ws, { type: 'playerMove', id, x: data.x, y: data.y });
     }
   });
 
-  ws.on('close', () => console.log('Cliente desconectado'));
+  ws.on('close', () => {
+    delete players[id];
+    broadcastAll({ type: 'playerLeft', id });
+  });
 });
+
+// Mandar a todos MENOS al remitente
+function broadcast(sender, data) {
+  wss.clients.forEach(client => {
+    if (client !== sender && client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(data));
+    }
+  });
+}
+
+// Mandar a TODOS incluyendo el remitente
+function broadcastAll(data) {
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(data));
+    }
+  });
+}

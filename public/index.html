@@ -2,69 +2,128 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Variable Compartida</title>
+  <title>Multiplayer</title>
   <style>
-    body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 40px; background: #1a1a2e; color: white; }
-    h1 { color: #e94560; }
-    #valor { font-size: 2rem; background: #16213e; padding: 20px 40px; border-radius: 10px; margin: 20px 0; border: 2px solid #e94560; }
-    input { padding: 10px; font-size: 1rem; border-radius: 8px; border: none; width: 300px; }
-    button { padding: 10px 20px; font-size: 1rem; background: #e94560; color: white; border: none; border-radius: 8px; cursor: pointer; margin-left: 10px; }
-    button:hover { background: #c73652; }
-    #status { color: #aaa; font-size: 0.85rem; margin-top: 20px; }
+    body { margin: 0; background: #1a1a2e; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: Arial, sans-serif; color: white; }
+    canvas { border: 2px solid #e94560; background: #16213e; }
+    #status { margin-top: 10px; color: #aaa; font-size: 0.85rem; }
+    #info { margin-bottom: 10px; color: #aaa; font-size: 0.85rem; }
   </style>
 </head>
 <body>
-  <h1>🌐 Variable Compartida</h1>
-  <p>Este valor es el mismo para <strong>todas las pestañas y PCs</strong> conectadas:</p>
-
-  <!-- Acá se muestra la variable -->
-  <div id="valor">Conectando...</div>
-
-  <div>
-    <input type="text" id="input" placeholder="Escribí un nuevo valor..." />
-    <button onclick="cambiarVariable()">Cambiar</button>
-  </div>
-
-  <div id="status">⚪ Conectando al servidor...</div>
+  <div id="info">Usá WASD o las flechas para moverte</div>
+  <canvas id="canvas" width="600" height="400"></canvas>
+  <div id="status">⚪ Conectando...</div>
 
   <script>
-    // Conectarse al servidor WebSocket
-    // En Render sería: wss://tu-app.onrender.com
-    const socket = new WebSocket('https://web-social-jspo.onrender.com/');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Colores para distinguir jugadores
+    const COLORS = ['#e94560', '#0f9b8e', '#f5a623', '#7b68ee', '#50fa7b'];
+
+    let myId = null;
+    let myPlayer = { x: 100, y: 100 };
+    let otherPlayers = {}; // { id: { x, y } }
+    let colorMap = {};     // { id: color }
+    let colorIndex = 0;
+
+    // Teclado
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.key] = true);
+    window.addEventListener('keyup',   e => keys[e.key] = false);
+
+    const SPEED = 3;
+    const SIZE  = 32;
+
+    // WebSocket — cambiá localhost por tu URL de Render
+    const socket = new WebSocket('ws://localhost:3000');
 
     socket.onopen = () => {
-      document.getElementById('status').textContent = '🟢 Conectado al servidor';
+      document.getElementById('status').textContent = '🟢 Conectado';
     };
 
     socket.onclose = () => {
-      document.getElementById('status').textContent = '🔴 Desconectado del servidor';
+      document.getElementById('status').textContent = '🔴 Desconectado';
     };
 
-    // Cuando el servidor nos manda un mensaje
     socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
 
-      if (data.type === 'update') {
-        // ✅ Actualizar lo que se ve en pantalla
-        document.getElementById('valor').textContent = data.value;
+      if (data.type === 'init') {
+        myId = data.id;
+        colorMap[myId] = COLORS[colorIndex++ % COLORS.length];
+
+        // Cargar jugadores que ya estaban
+        for (let id in data.players) {
+          if (id !== myId) {
+            otherPlayers[id] = data.players[id];
+            colorMap[id] = COLORS[colorIndex++ % COLORS.length];
+          }
+        }
+      }
+
+      if (data.type === 'playerJoined') {
+        otherPlayers[data.id] = { x: data.x, y: data.y };
+        colorMap[data.id] = COLORS[colorIndex++ % COLORS.length];
+      }
+
+      if (data.type === 'playerMove') {
+        if (otherPlayers[data.id]) {
+          otherPlayers[data.id].x = data.x;
+          otherPlayers[data.id].y = data.y;
+        }
+      }
+
+      if (data.type === 'playerLeft') {
+        delete otherPlayers[data.id];
+        delete colorMap[data.id];
       }
     };
 
-    // Cuando apretás el botón
-    function cambiarVariable() {
-      const nuevoValor = document.getElementById('input').value;
-      if (!nuevoValor) return;
+    // Game loop
+    function gameLoop() {
+      // Mover mi jugador
+      if (keys['w'] || keys['ArrowUp'])    myPlayer.y -= SPEED;
+      if (keys['s'] || keys['ArrowDown'])  myPlayer.y += SPEED;
+      if (keys['a'] || keys['ArrowLeft'])  myPlayer.x -= SPEED;
+      if (keys['d'] || keys['ArrowRight']) myPlayer.x += SPEED;
 
-      // Mandar el nuevo valor al servidor
-      socket.send(JSON.stringify({ type: 'change', value: nuevoValor }));
+      // Mantener dentro del canvas
+      myPlayer.x = Math.max(0, Math.min(canvas.width  - SIZE, myPlayer.x));
+      myPlayer.y = Math.max(0, Math.min(canvas.height - SIZE, myPlayer.y));
 
-      document.getElementById('input').value = '';
+      // Mandar posición al servidor
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'move', x: myPlayer.x, y: myPlayer.y }));
+      }
+
+      // Dibujar
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Dibujar otros jugadores
+      for (let id in otherPlayers) {
+        const p = otherPlayers[id];
+        ctx.fillStyle = colorMap[id] || '#fff';
+        ctx.fillRect(p.x, p.y, SIZE, SIZE);
+        ctx.fillStyle = 'white';
+        ctx.font = '11px Arial';
+        ctx.fillText('Jugador', p.x, p.y - 5);
+      }
+
+      // Dibujar MI jugador (encima de todos)
+      if (myId) {
+        ctx.fillStyle = colorMap[myId] || '#e94560';
+        ctx.fillRect(myPlayer.x, myPlayer.y, SIZE, SIZE);
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 11px Arial';
+        ctx.fillText('Tú', myPlayer.x + 8, myPlayer.y - 5);
+      }
+
+      requestAnimationFrame(gameLoop);
     }
 
-    // También con Enter
-    document.getElementById('input').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') cambiarVariable();
-    });
+    gameLoop();
   </script>
 </body>
 </html>
